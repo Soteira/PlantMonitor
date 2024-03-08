@@ -4,7 +4,34 @@
 #include "Air_Quality_Sensor.h"
 #include "Adafruit_BME280.h"
 #include "Adafruit_SSD1306.h"
+#include <Adafruit_MQTT.h>
+#include "Adafruit_MQTT\Adafruit_MQTT_SPARK.h"
+#include "Adafruit_MQTT\Adafruit_MQTT.h"
+#include "credentials.h"
 
+/************ Global State (you don't need to change this!) ***   ***************/ 
+TCPClient TheClient; 
+
+// Setup the MQTT client class by passing in the WiFi client and MQTT server and login details. 
+Adafruit_MQTT_SPARK mqtt(&TheClient,AIO_SERVER,AIO_SERVERPORT,AIO_USERNAME,AIO_KEY); 
+
+/****************************** Feeds ***************************************/ 
+// Setup Feeds to publish or subscribe 
+// Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname> 
+Adafruit_MQTT_Subscribe subFeed = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/buttonOnOff"); 
+Adafruit_MQTT_Publish pubFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/randomNumber");
+
+/************Declare Variables*************/
+unsigned int last, lastTime;
+float pubValue;
+int subValue;
+float num;
+const int OnboardLED = D7;
+bool buttonOnOff;
+
+/************Declare Functions*************/
+void MQTT_connect();
+bool MQTT_ping();
 
 int DUST_SENSOR_PIN = A0;
 int SENSOR_READING_INTERVAL = 3000;
@@ -47,6 +74,19 @@ void getDustSensorReadings();
 void setup() {
   Serial.begin(9600);
 
+pinMode(OnboardLED,OUTPUT);
+
+  // Connect to Internet but not Particle Cloud
+  WiFi.on();
+  WiFi.connect();
+  while(WiFi.connecting()) {
+    Serial.printf(".");
+  }
+  Serial.printf("\n\n");
+
+  // Setup MQTT subscription
+  mqtt.subscribe(&subFeed);
+
 pinMode(DUST_SENSOR_PIN, INPUT);
 pinMode(MOISTPIN, INPUT);
 pinMode(WTRPUMP, OUTPUT);
@@ -63,6 +103,32 @@ display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 }  
 
 void loop() {
+
+MQTT_connect();
+  MQTT_ping();
+
+  pubValue = random(10000);
+
+  // this is our 'wait for incoming subscription packets' busy subloop 
+  Adafruit_MQTT_Subscribe *subscription;
+  while ((subscription = mqtt.readSubscription(10000))) {
+    if (subscription == &subFeed) {
+      subValue = atoi((char *)subFeed.lastread);
+      Serial.printf("subValue is: %i \n", subValue);
+    }
+  }
+
+    if((millis()-lastTime > 6000)) {
+    if(mqtt.Update()) {
+      pubFeed.publish(pubValue);
+      Serial.printf("Publishing %0.2f \n",pubValue); 
+       //Serial.printf("Current random number is %i \n", num);
+      } 
+    lastTime = millis();
+  }
+
+buttonOnOff = subValue;
+digitalWrite(OnboardLED, buttonOnOff);
 
 moisture = analogRead(A2);
 
@@ -163,6 +229,42 @@ void getDustSensorReadings(){
   
     return qual;
   };
+
+  void MQTT_connect() {
+  int8_t ret;
+ 
+  // Return if already connected.
+  if (mqtt.connected()) {
+    return;
+  }
+ 
+  Serial.print("Connecting to MQTT... ");
+ 
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+       Serial.printf("Error Code %s\n",mqtt.connectErrorString(ret));
+       Serial.printf("Retrying MQTT connection in 5 seconds...\n");
+       mqtt.disconnect();
+       delay(5000);  // wait 5 seconds and try again
+  }
+  Serial.printf("MQTT Connected!\n");
+}
+
+bool MQTT_ping() {
+  static unsigned int last;
+  bool pingStatus;
+
+  if ((millis()-last)>120000) {
+      Serial.printf("Pinging MQTT \n");
+      pingStatus = mqtt.ping();
+      if(!pingStatus) {
+        Serial.printf("Disconnecting \n");
+        mqtt.disconnect();
+      }
+      last = millis();
+  }
+  return pingStatus;
+}
+
   //void BMEValues(int temp, int pressure, int humidity){
 
     //temp= (int)bme.readTemperature();
