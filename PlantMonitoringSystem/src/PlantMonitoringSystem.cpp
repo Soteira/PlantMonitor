@@ -21,6 +21,20 @@ Adafruit_MQTT_SPARK mqtt(&TheClient,AIO_SERVER,AIO_SERVERPORT,AIO_USERNAME,AIO_K
 Adafruit_MQTT_Subscribe subFeed = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/buttonOnOff"); 
 Adafruit_MQTT_Publish pubFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/randomNumber");
 
+Adafruit_MQTT_Publish pubMoistureFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/PhytoMoisture");
+
+Adafruit_MQTT_Publish pubPressureFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/PhytoPressure");
+
+Adafruit_MQTT_Publish pubTempFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/PhytoTemp");
+
+Adafruit_MQTT_Publish pubHumidityFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/PhytoHumidity");
+
+Adafruit_MQTT_Publish pubDustFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/PhytoDust");
+
+Adafruit_MQTT_Publish pubAQFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/PhytoAirQuality");
+
+
+
 /************Declare Variables*************/
 unsigned int last, lastTime;
 float pubValue;
@@ -118,10 +132,17 @@ MQTT_connect();
     }
   }
 
-    if((millis()-lastTime > 6000)) {
+    if((millis()-lastTime > 100000)) {
     if(mqtt.Update()) {
       pubFeed.publish(pubValue);
       Serial.printf("Publishing %0.2f \n",pubValue); 
+      pubMoistureFeed.publish(moisture);
+      pubPressureFeed.publish(pressure);
+      pubTempFeed.publish(temp);
+      pubHumidityFeed.publish(humidity);
+      pubDustFeed.publish(concentration);
+      pubAQFeed.publish(AQS_PIN);
+
        //Serial.printf("Current random number is %i \n", num);
       } 
     lastTime = millis();
@@ -129,6 +150,8 @@ MQTT_connect();
 
 buttonOnOff = subValue;
 digitalWrite(OnboardLED, buttonOnOff);
+
+digitalWrite(WTRPUMP, buttonOnOff);
 
 moisture = analogRead(A2);
 
@@ -169,7 +192,7 @@ if ((millis() - lastInterval) > SENSOR_READING_INTERVAL)
 
   Serial.printf("Moisture levels are: %i \n", moisture);
  
-  if(moisture > 2000)
+  if(moisture > 2000)       // turns the pump on or off depending on moisture levels
   digitalWrite(WTRPUMP, HIGH);
   
   lowPulseOccupancy = 0;
